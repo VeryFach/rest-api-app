@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { createClient } from '@supabase/supabase-js';
 import { UsersModule } from './users/users.module';
 import { PostsModule } from './posts/posts.module';
+import {AuthModule} from './auth/auth.module';
 
 @Global()
 @Module({
@@ -12,6 +13,7 @@ import { PostsModule } from './posts/posts.module';
     }),
     UsersModule,
     PostsModule,
+    AuthModule
   ],
   providers: [
     {

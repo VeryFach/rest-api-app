@@ -11,13 +11,23 @@ import { SupabaseClient } from '@supabase/supabase-js';
 
 @Injectable()
 export class UsersService {
-    constructor(
+        constructor(
         @Inject('SUPABASE_CLIENT')
         private readonly supabase: SupabaseClient,
     ) { }
+    
+    async findByEmail(email: string): Promise<any | null> {
+        const { data, error } = await this.supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+        if (error || !data) return null;
+        return data;
+    }
 
     async create(createUserDto: CreateUserDto): Promise<User | null> {
-        // Cek apakah email sudah ada
         const { data: existingUser, error: findError } = await this.supabase
             .from('users')
             .select('*')
@@ -27,7 +37,6 @@ export class UsersService {
         if (findError) throw new Error(findError.message);
         if (existingUser) throw new ConflictException('Email already exists');
 
-        // Insert user baru
         const { data, error } = await this.supabase
             .from('users')
             .insert([createUserDto])
@@ -51,7 +60,7 @@ export class UsersService {
     async findOne(id: number): Promise<User | null> {
         const { data, error } = await this.supabase
             .from('users')
-            .select('*, posts(*)') // jika kamu punya relasi "posts"
+            .select('*, posts(*)')
             .eq('id', id)
             .maybeSingle();
 
@@ -62,7 +71,6 @@ export class UsersService {
     }
 
     async update(id: number, updateUserDto: UpdateUserDto): Promise<User | null> {
-        // Pastikan user ada
         const { data: user, error: findError } = await this.supabase
             .from('users')
             .select('*')
@@ -72,7 +80,6 @@ export class UsersService {
         if (findError) throw new Error(findError.message);
         if (!user) throw new NotFoundException(`User with ID ${id} not found`);
 
-        // Cek duplikasi email
         if (updateUserDto.email && updateUserDto.email !== user.email) {
             const { data: existingUser } = await this.supabase
                 .from('users')
@@ -83,7 +90,6 @@ export class UsersService {
             if (existingUser) throw new ConflictException('Email already exists');
         }
 
-        // Update user
         const { data, error } = await this.supabase
             .from('users')
             .update(updateUserDto)
