@@ -20,44 +20,48 @@ export class UsersController {
 
     @Post()
     @HttpCode(HttpStatus.CREATED)
-    create(@Body() createUserDto: CreateUserDto) {
+    async create(@Body() createUserDto: CreateUserDto) {
+        const data = await this.usersService.create(createUserDto);
         return {
             message: 'User created successfully',
-            data: this.usersService.create(createUserDto)
+            data
         };
     }
 
     @Get()
-    findAll() {
+    async findAll() {
+        const data = await this.usersService.findAll();
         return {
             message: 'Users retrieved successfully',
-            data: this.usersService.findAll()
+            data
         };
     }
 
     @Get(':id')
-    findOne(@Param('id', ParseIntPipe) id: number) {
+    async findOne(@Param('id', ParseIntPipe) id: number) {
+        const data = await this.usersService.findOne(id);
         return {
             message: 'User retrieved successfully',
-            data: this.usersService.findOne(id)
+            data
         };
     }
 
     @Patch(':id')
-    update(
+    async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateUserDto: UpdateUserDto
     ) {
+        const data = await this.usersService.update(id, updateUserDto);
         return {
             message: 'User updated successfully',
-            data: this.usersService.update(id, updateUserDto)
+            data
         };
     }
 
     @Delete(':id')
     @HttpCode(HttpStatus.OK)
-    remove(@Param('id', ParseIntPipe) id: number) {
-        this.usersService.remove(id);
+    async remove(@Param('id', ParseIntPipe) id: number) {
+        await this.usersService.remove(id);
         return {
             message: 'User deleted successfully'
         };

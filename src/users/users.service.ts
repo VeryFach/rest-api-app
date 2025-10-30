@@ -1,74 +1,117 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+    Injectable,
+    NotFoundException,
+    ConflictException,
+    Inject,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 @Injectable()
 export class UsersService {
-    private users: User[] = [];
-    private currentId = 1;
+    constructor(
+        @Inject('SUPABASE_CLIENT')
+        private readonly supabase: SupabaseClient,
+    ) { }
 
-    create(createUserDto: CreateUserDto): User {
-        const existingUser = this.users.find(u => u.email === createUserDto.email);
-        if (existingUser) {
-            throw new ConflictException('Email already exists');
+    async create(createUserDto: CreateUserDto): Promise<User | null> {
+        // Cek apakah email sudah ada
+        const { data: existingUser, error: findError } = await this.supabase
+            .from('users')
+            .select('*')
+            .eq('email', createUserDto.email)
+            .maybeSingle();
+
+        if (findError) throw new Error(findError.message);
+        if (existingUser) throw new ConflictException('Email already exists');
+
+        // Insert user baru
+        const { data, error } = await this.supabase
+            .from('users')
+            .insert([createUserDto])
+            .select()
+            .single();
+
+        if (error) throw new Error(error.message);
+        return this.sanitizeUser(data);
+    }
+
+    async findAll(): Promise<(User | null)[]> {
+        const { data, error } = await this.supabase
+            .from('users')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw new Error(error.message);
+        return data.map((user) => this.sanitizeUser(user));
+    }
+
+    async findOne(id: number): Promise<User | null> {
+        const { data, error } = await this.supabase
+            .from('users')
+            .select('*, posts(*)') // jika kamu punya relasi "posts"
+            .eq('id', id)
+            .maybeSingle();
+
+        if (error) throw new Error(error.message);
+        if (!data) throw new NotFoundException(`User with ID ${id} not found`);
+
+        return this.sanitizeUser(data);
+    }
+
+    async update(id: number, updateUserDto: UpdateUserDto): Promise<User | null> {
+        // Pastikan user ada
+        const { data: user, error: findError } = await this.supabase
+            .from('users')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (findError) throw new Error(findError.message);
+        if (!user) throw new NotFoundException(`User with ID ${id} not found`);
+
+        // Cek duplikasi email
+        if (updateUserDto.email && updateUserDto.email !== user.email) {
+            const { data: existingUser } = await this.supabase
+                .from('users')
+                .select('id')
+                .eq('email', updateUserDto.email)
+                .maybeSingle();
+
+            if (existingUser) throw new ConflictException('Email already exists');
         }
 
-        const user: User = {
-            id: this.currentId++,
-            ...createUserDto,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
+        // Update user
+        const { data, error } = await this.supabase
+            .from('users')
+            .update(updateUserDto)
+            .eq('id', id)
+            .select()
+            .single();
 
-        this.users.push(user);
-        return this.sanitizeUser(user);
+        if (error) throw new Error(error.message);
+        return this.sanitizeUser(data);
     }
 
-    findAll(): User[] {
-        return this.users.map(user => this.sanitizeUser(user));
-    }
+    async remove(id: number): Promise<void> {
+        const { data, error } = await this.supabase
+            .from('users')
+            .delete()
+            .eq('id', id)
+            .select()
+            .maybeSingle();
 
-    findOne(id: number): User {
-        const user = this.users.find(u => u.id === id);
-        if (!user) {
+        if (error) throw new Error(error.message);
+        if (!data) {
             throw new NotFoundException(`User with ID ${id} not found`);
         }
-        return this.sanitizeUser(user);
     }
 
-    update(id: number, updateUserDto: UpdateUserDto): User {
-        const userIndex = this.users.findIndex(u => u.id === id);
-        if (userIndex === -1) {
-            throw new NotFoundException(`User with ID ${id} not found`);
-        }
-
-        if (updateUserDto.email) {
-            const existingUser = this.users.find(u => u.email === updateUserDto.email && u.id !== id);
-            if (existingUser) {
-                throw new ConflictException('Email already exists');
-            }
-        }
-
-        this.users[userIndex] = {
-            ...this.users[userIndex],
-            ...updateUserDto,
-            updatedAt: new Date(),
-        };
-
-        return this.sanitizeUser(this.users[userIndex]);
-    }
-
-    remove(id: number): void {
-        const userIndex = this.users.findIndex(u => u.id === id);
-        if (userIndex === -1) {
-            throw new NotFoundException(`User with ID ${id} not found`);
-        }
-        this.users.splice(userIndex, 1);
-    }
-
-    private sanitizeUser(user: User): User {
-        const { password, ...result } = user;
-        return result as User;
+    private sanitizeUser(user: User | null | undefined): User | null {
+        if (!user) return null;
+        const { password, ...safeUser } = user;
+        return safeUser as User;
     }
 }

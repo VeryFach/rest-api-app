@@ -21,18 +21,19 @@ export class PostsController {
 
     @Post()
     @HttpCode(HttpStatus.CREATED)
-    create(@Body() createPostDto: CreatePostDto) {
+    async create(@Body() createPostDto: CreatePostDto) {
+        const data = await this.postsService.create(createPostDto);
         return {
             message: 'Post created successfully',
-            data: this.postsService.create(createPostDto)
+            data
         };
     }
 
     @Get()
-    findAll(@Query('userId', ParseIntPipe) userId?: number) {
+    async findAll(@Query('userId') userId?: string) {
         const data = userId
-            ? this.postsService.findByUserId(userId)
-            : this.postsService.findAll();
+            ? await this.postsService.findByUserId(parseInt(userId))
+            : await this.postsService.findAll();
 
         return {
             message: 'Posts retrieved successfully',
@@ -41,28 +42,30 @@ export class PostsController {
     }
 
     @Get(':id')
-    findOne(@Param('id', ParseIntPipe) id: number) {
+    async findOne(@Param('id', ParseIntPipe) id: number) {
+        const data = await this.postsService.findOne(id);
         return {
             message: 'Post retrieved successfully',
-            data: this.postsService.findOne(id)
+            data
         };
     }
 
     @Patch(':id')
-    update(
+    async update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updatePostDto: UpdatePostDto
     ) {
+        const data = await this.postsService.update(id, updatePostDto);
         return {
             message: 'Post updated successfully',
-            data: this.postsService.update(id, updatePostDto)
+            data
         };
     }
 
     @Delete(':id')
     @HttpCode(HttpStatus.OK)
-    remove(@Param('id', ParseIntPipe) id: number) {
-        this.postsService.remove(id);
+    async remove(@Param('id', ParseIntPipe) id: number) {
+        await this.postsService.remove(id);
         return {
             message: 'Post deleted successfully'
         };

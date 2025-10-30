@@ -1,70 +1,90 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
-import { Post } from './entities/post.entity';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class PostsService {
-    private posts: Post[] = [];
-    private currentId = 1;
+    constructor(
+        @Inject('SUPABASE_CLIENT')
+        private readonly supabase: SupabaseClient,
+        private readonly usersService: UsersService,
+    ) { }
 
-    constructor(private readonly usersService: UsersService) { }
+    async create(createPostDto: CreatePostDto) {
+        // Pastikan user yang dimaksud ada
+        await this.usersService.findOne(createPostDto.userId);
 
-    create(createPostDto: CreatePostDto): Post {
-        // Validate user exists
-        this.usersService.findOne(createPostDto.userId);
+        const { data, error } = await this.supabase
+            .from('posts')
+            .insert([
+                {
+                    title: createPostDto.title,
+                    content: createPostDto.content,
+                    user_id: createPostDto.userId, // pastikan kolom di DB sesuai
+                },
+            ])
+            .select()
+            .single();
 
-        const post: Post = {
-            id: this.currentId++,
-            ...createPostDto,
-            published: createPostDto.published ?? false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-
-        this.posts.push(post);
-        return post;
+        if (error) throw new Error(error.message);
+        return data;
     }
 
-    findAll(): Post[] {
-        return this.posts;
+    async findAll() {
+        const { data, error } = await this.supabase
+            .from('posts')
+            .select('*, users(*)')
+            .order('created_at', { ascending: false });
+
+        if (error) throw new Error(error.message);
+        return data;
     }
 
-    findByUserId(userId: number): Post[] {
-        // Validate user exists
-        this.usersService.findOne(userId);
-        return this.posts.filter(post => post.userId === userId);
+    async findByUserId(userId: number) {
+        await this.usersService.findOne(userId);
+
+        const { data, error } = await this.supabase
+            .from('posts')
+            .select('*, users(*)')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw new Error(error.message);
+        return data;
     }
 
-    findOne(id: number): Post {
-        const post = this.posts.find(p => p.id === id);
-        if (!post) {
-            throw new NotFoundException(`Post with ID ${id} not found`);
-        }
-        return post;
+    async findOne(id: number) {
+        const { data, error } = await this.supabase
+            .from('posts')
+            .select('*, users(*)')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (error) throw new Error(error.message);
+        if (!data) throw new NotFoundException(`Post with ID ${id} not found`);
+        return data;
     }
 
-    update(id: number, updatePostDto: UpdatePostDto): Post {
-        const postIndex = this.posts.findIndex(p => p.id === id);
-        if (postIndex === -1) {
-            throw new NotFoundException(`Post with ID ${id} not found`);
-        }
+    async update(id: number, updatePostDto: UpdatePostDto) {
+        const { data, error } = await this.supabase
+            .from('posts')
+            .update({
+                title: updatePostDto.title,
+                content: updatePostDto.content,
+            })
+            .eq('id', id)
+            .select()
+            .single();
 
-        this.posts[postIndex] = {
-            ...this.posts[postIndex],
-            ...updatePostDto,
-            updatedAt: new Date(),
-        };
-
-        return this.posts[postIndex];
+        if (error) throw new Error(error.message);
+        if (!data) throw new NotFoundException(`Post with ID ${id} not found`);
+        return data;
     }
 
-    remove(id: number): void {
-        const postIndex = this.posts.findIndex(p => p.id === id);
-        if (postIndex === -1) {
-            throw new NotFoundException(`Post with ID ${id} not found`);
-        }
-        this.posts.splice(postIndex, 1);
+    async remove(id: number): Promise<void> {
+        const { error } = await this.supabase.from('posts').delete().eq('id', id);
+        if (error) throw new Error(error.message);
     }
 }

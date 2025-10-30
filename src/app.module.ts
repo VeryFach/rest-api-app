@@ -1,8 +1,34 @@
-import { Module } from '@nestjs/common';
+import { Module, Global } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { createClient } from '@supabase/supabase-js';
 import { UsersModule } from './users/users.module';
 import { PostsModule } from './posts/posts.module';
 
+@Global()
 @Module({
-  imports: [UsersModule, PostsModule],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+    UsersModule,
+    PostsModule,
+  ],
+  providers: [
+    {
+      provide: 'SUPABASE_CLIENT',
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const url = configService.get<string>('SUPABASE_URL');
+        const key = configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+
+        if (!url || !key) {
+          throw new Error('Missing Supabase environment variables!');
+        }
+
+        return createClient(url, key);
+      },
+    },
+  ],
+  exports: ['SUPABASE_CLIENT'],
 })
 export class AppModule {}
