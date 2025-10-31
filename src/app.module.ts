@@ -1,9 +1,13 @@
 import { Module, Global } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { createClient } from '@supabase/supabase-js';
 import { UsersModule } from './users/users.module';
 import { PostsModule } from './posts/posts.module';
 import {AuthModule} from './auth/auth.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { User } from './users/entities/user.entity';
+import { Post } from './posts/entities/post.entity';
 
 @Global()
 @Module({
@@ -16,6 +20,10 @@ import {AuthModule} from './auth/auth.module';
     AuthModule
   ],
   providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
     {
       provide: 'SUPABASE_CLIENT',
       inject: [ConfigService],

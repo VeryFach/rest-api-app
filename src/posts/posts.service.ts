@@ -13,7 +13,6 @@ export class PostsService {
     ) { }
 
     async create(createPostDto: CreatePostDto) {
-        // Pastikan user yang dimaksud ada
         await this.usersService.findOne(createPostDto.userId);
 
         const { data, error } = await this.supabase
@@ -22,7 +21,7 @@ export class PostsService {
                 {
                     title: createPostDto.title,
                     content: createPostDto.content,
-                    user_id: createPostDto.userId, // pastikan kolom di DB sesuai
+                    user_id: createPostDto.userId,
                 },
             ])
             .select()
