@@ -1,13 +1,12 @@
-import { Module, Global } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { createClient } from '@supabase/supabase-js';
-import { UsersModule } from './users/users.module';
-import { PostsModule } from './posts/posts.module';
-import {AuthModule} from './auth/auth.module';
+import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
-import { User } from './users/entities/user.entity';
-import { Post } from './posts/entities/post.entity';
+import { RolesGuard } from './common/guards/roles.guard';
+import { PostsModule } from './posts/posts.module';
+import { UsersModule } from './users/users.module';
 
 @Global()
 @Module({
@@ -23,6 +22,10 @@ import { Post } from './posts/entities/post.entity';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
     },
     {
       provide: 'SUPABASE_CLIENT',

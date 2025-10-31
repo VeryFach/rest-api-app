@@ -3,13 +3,15 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
-describe('Posts (e2e)', () => {
+describe('PostsModule (e2e)', () => {
     let app: INestApplication;
-    let userId: number;
+    let authToken: string;
     let postId: number;
-    const user = {
-        name: 'Post E2E User',
-        email: `post-e2e-${Date.now()}@example.com`,
+    let userId: number;
+
+    const userPayload = {
+        name: 'Test User',
+        email: 'test@example.com',
         password: 'password123',
     };
 
@@ -27,87 +29,122 @@ describe('Posts (e2e)', () => {
             }),
         );
         await app.init();
+
+        // Login untuk mendapatkan token
+        const loginResponse = await request(app.getHttpServer())
+            .post('/auth/login')
+            .send({
+                email: userPayload.email,
+                password: userPayload.password,
+            })
+            .expect(200);
+
+        authToken = loginResponse.body?.data?.access_token || loginResponse.body?.access_token;
+
+        // Dapatkan userId dari profile endpoint
+        const profileRes = await request(app.getHttpServer())
+            .get('/auth/profile')
+            .set('Authorization', `Bearer ${authToken}`)
+            .expect(200);
+
+        userId = profileRes.body.data.id;
     });
 
     afterAll(async () => {
         if (app) await app.close();
     });
 
-    it('/auth/register (POST) → should register a user', async () => {
-        const res = await request(app.getHttpServer())
-            .post('/auth/register')
-            .send(user)
-            .expect(201);
-
-        expect(res.body).toHaveProperty('message', 'Registration successful');
-        expect(res.body.data).toHaveProperty('access_token');
-        expect(res.body.data).toHaveProperty('user');
-        // user id may come as string or number depending on DB/provider
-        userId = Number(res.body.data.user.id);
-        expect(Number.isFinite(userId)).toBe(true);
-    });
-
-    it('/posts (POST) → should create a post for the user', async () => {
-        const payload = {
-            title: 'E2E Test Post',
-            content: 'This is the content for the E2E test post. It has enough length.',
-            userId,
+    it('/posts (POST) → should create a post', async () => {
+        const newPost = {
+            title: 'Test Post Title',
+            content: 'This is test post content',
+            userId: userId,
         };
 
         const res = await request(app.getHttpServer())
             .post('/posts')
-            .send(payload)
+            .set('Authorization', `Bearer ${authToken}`)
+            .send(newPost)
             .expect(201);
 
         expect(res.body).toHaveProperty('message', 'Post created successfully');
         expect(res.body).toHaveProperty('data');
-        expect(res.body.data).toHaveProperty('id');
-        expect(res.body.data).toHaveProperty('title', payload.title);
-        postId = Number(res.body.data.id);
-        expect(Number.isFinite(postId)).toBe(true);
+        expect(res.body.data).toHaveProperty('title', newPost.title);
+        expect(res.body.data).toHaveProperty('content', newPost.content);
+        postId = res.body.data.id;
     });
 
-    it('/posts (GET) → should retrieve all posts', async () => {
-        const res = await request(app.getHttpServer()).get('/posts').expect(200);
-
-        expect(res.body).toHaveProperty('message', 'Posts retrieved successfully');
-        expect(Array.isArray(res.body.data)).toBe(true);
-    });
-
-    it('/posts?userId= (GET) → should retrieve posts for the user', async () => {
+    it('/posts (GET) → should get all posts', async () => {
         const res = await request(app.getHttpServer())
             .get('/posts')
-            .query({ userId })
+            .set('Authorization', `Bearer ${authToken}`)
             .expect(200);
 
         expect(res.body).toHaveProperty('message', 'Posts retrieved successfully');
         expect(Array.isArray(res.body.data)).toBe(true);
-        // if posts exist for the user, at least one should belong to that user
+    });
+
+    it('/posts?userId= (GET) → should get posts by userId', async () => {
+        const res = await request(app.getHttpServer())
+            .get(`/posts?userId=${userId}`)
+            .set('Authorization', `Bearer ${authToken}`)
+            .expect(200);
+
+        expect(res.body).toHaveProperty('message', 'Posts retrieved successfully');
+        expect(Array.isArray(res.body.data)).toBe(true);
         if (res.body.data.length > 0) {
-            const belongs = res.body.data.some((p: any) => Number(p.user_id ?? p.user?.id ?? p.user_id) === userId || Number(p.user?.id) === userId);
-            // one of the posts should belong to the created user (best-effort check)
-            expect(belongs).toBe(true);
+            expect(res.body.data[0]).toHaveProperty('user_id', userId);
         }
     });
 
-    it('/posts/:id (GET) → should retrieve a single post by id', async () => {
-        const res = await request(app.getHttpServer()).get(`/posts/${postId}`).expect(200);
+    it('/posts/:id (GET) → should get post by id', async () => {
+        const res = await request(app.getHttpServer())
+            .get(`/posts/${postId}`)
+            .set('Authorization', `Bearer ${authToken}`)
+            .expect(200);
 
         expect(res.body).toHaveProperty('message', 'Post retrieved successfully');
-        expect(res.body).toHaveProperty('data');
-        expect(Number(res.body.data.id)).toBe(postId);
+        expect(res.body.data.id).toBe(postId);
     });
 
-    it('/posts/:id (PATCH) → should update the post', async () => {
-        const payload = { title: 'Updated E2E Title', content: 'Updated content for the post.' };
-        const res = await request(app.getHttpServer()).patch(`/posts/${postId}`).send(payload).expect(200);
+    it('/posts/:id (PATCH) → should update post', async () => {
+        const update = { 
+            title: 'Updated Post Title', 
+            content: 'Updated post content' 
+        };
+
+        const res = await request(app.getHttpServer())
+            .patch(`/posts/${postId}`)
+            .set('Authorization', `Bearer ${authToken}`)
+            .send(update)
+            .expect(200);
 
         expect(res.body).toHaveProperty('message', 'Post updated successfully');
-        expect(res.body.data).toHaveProperty('title', payload.title);
+        expect(res.body.data.title).toBe(update.title);
+        expect(res.body.data.content).toBe(update.content);
     });
 
-    it('/posts/:id (DELETE) → should delete the post', async () => {
-        const res = await request(app.getHttpServer()).delete(`/posts/${postId}`).expect(200);
+    it('/posts/:id (DELETE) → should delete post', async () => {
+        // Buat post baru untuk dihapus
+        const postToDelete = {
+            title: 'Post To Delete',
+            content: 'This post will be deleted',
+            userId: userId,
+        };
+
+        const createRes = await request(app.getHttpServer())
+            .post('/posts')
+            .set('Authorization', `Bearer ${authToken}`)
+            .send(postToDelete)
+            .expect(201);
+
+        const deletePostId = createRes.body.data.id;
+
+        const res = await request(app.getHttpServer())
+            .delete(`/posts/${deletePostId}`)
+            .set('Authorization', `Bearer ${authToken}`)
+            .expect(200);
+
         expect(res.body).toHaveProperty('message', 'Post deleted successfully');
     });
 });

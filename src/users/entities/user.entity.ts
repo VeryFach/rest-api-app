@@ -8,6 +8,11 @@ import {
 } from 'typeorm';
 import { Post } from '../../posts/entities/post.entity';
 
+export enum UserRole {
+    USER = 'user',
+    ADMIN = 'admin',
+}
+
 @Entity('users')
 export class User {
     @PrimaryGeneratedColumn()
@@ -30,4 +35,7 @@ export class User {
 
     @OneToMany(() => Post, post => post.user, { cascade: true })
     posts: Post[];
+
+    @Column({ type: 'enum', enum: UserRole, default: UserRole.USER })
+    role: UserRole;
 }
